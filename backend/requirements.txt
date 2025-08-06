@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+requests
+librosa
+numpy
+python-dotenv
+groq
+openai-whisper
+torch
+torchaudio
+soundfile
+pydub
+pydantic
