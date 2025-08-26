@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pure Voice Recording</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 600px;
+            padding: 40px;
+            background: #2a2a2a;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+        
+        .title {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+            opacity: 0.9;
+        }
+        
+        .record-btn {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: none;
+            font-size: 4rem;
+            cursor: pointer;
+            margin: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+        
+        .record-btn.start {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+        
+        .record-btn.stop {
+            background: linear-gradient(135deg, #f44336, #d32f2f);
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .record-btn.processing {
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+            color: white;
+            cursor: not-allowed;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .record-btn:hover:not(.processing) {
+            transform: scale(1.05);
+        }
+        
+        .status {
+            color: white;
+            font-size: 18px;
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        
+        .timer {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 20px 0;
+            color: #4CAF50;
+        }
+        
+        .controls {
+            margin: 30px 0;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .control-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .download-btn {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 20px 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.6);
+        }
+        
+        .audio-player {
+            margin: 20px 0;
+            width: 100%;
+        }
+        
+        .audio-player audio {
+            width: 100%;
+            border-radius: 10px;
+        }
+        
+        .recording-info {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .recording-info h3 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        
+        .recording-info p {
+            margin: 5px 0;
+            opacity: 0.9;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                margin: 20px;
+                padding: 30px 20px;
+            }
+            
+            .title {
+                font-size: 2rem;
+            }
+            
+            .record-btn {
+                width: 150px;
+                height: 150px;
+                font-size: 3rem;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">🔊 Pure Voice Recording</div>
+        <div class="subtitle">Record and download audio files</div>
+        
+        <button id="recordBtn" class="record-btn start" onclick="toggleRecording()">
+            🎤
+        </button>
+        
+        <div id="timer" class="timer">00:00</div>
+        <div id="status" class="status">Ready to record</div>
+        
+        <div class="controls">
+            <button id="pauseBtn" class="control-btn" onclick="pauseRecording()" disabled>
+                ⏸️ Pause
+            </button>
+            <button id="resumeBtn" class="control-btn" onclick="resumeRecording()" disabled>
+                ▶️ Resume
+            </button>
+            <button id="clearBtn" class="control-btn" onclick="clearRecording()">
+                🗑️ Clear
+            </button>
+        </div>
+        
+        <div id="audioPlayer" class="audio-player" style="display: none;">
+            <audio controls></audio>
+        </div>
+        
+        <div id="downloadSection" style="display: none;">
+            <button id="downloadBtn" class="download-btn" onclick="downloadRecording()">
+                📥 Download Recording
+            </button>
+        </div>
+        
+        <div id="recordingInfo" class="recording-info" style="display: none;">
+            <h3>📊 Recording Information</h3>
+            <p><strong>Duration:</strong> <span id="infoDuration">-</span></p>
+            <p><strong>Size:</strong> <span id="infoSize">-</span></p>
+            <p><strong>Format:</strong> <span id="infoFormat">WAV</span></p>
+            <p><strong>Quality:</strong> <span id="infoQuality">High (48kHz)</span></p>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let isPaused = false;
+        let startTime;
+        let pausedTime = 0;
+        let timerInterval;
+        let audioBlob;
+
+        const recordBtn = document.getElementById('recordBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resumeBtn = document.getElementById('resumeBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const status = document.getElementById('status');
+        const timer = document.getElementById('timer');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const downloadSection = document.getElementById('downloadSection');
+        const recordingInfo = document.getElementById('recordingInfo');
+
+        async function toggleRecording() {
+            if (!isRecording) {
+                await startRecording();
+            } else {
+                await stopRecording();
+            }
+        }
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 48000
+                    }
+                });
+                
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
+                
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    displayAudioPlayer();
+                    updateRecordingInfo();
+                };
+                
+                mediaRecorder.start(1000); // Collect data every second
+                
+                isRecording = true;
+                startTime = Date.now() - pausedTime;
+                
+                recordBtn.textContent = '⏹️';
+                recordBtn.className = 'record-btn stop';
+                status.textContent = '🔴 Recording... Click to stop';
+                
+                pauseBtn.disabled = false;
+                clearBtn.disabled = true;
+                
+                startTimer();
+                
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                status.textContent = 'Error: Could not access microphone';
+            }
+        }
+
+        async function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            
+            // Stop all audio tracks
+            if (mediaRecorder && mediaRecorder.stream) {
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+            
+            isRecording = false;
+            isPaused = false;
+            
+            recordBtn.textContent = '🎤';
+            recordBtn.className = 'record-btn start';
+            status.textContent = 'Recording completed!';
+            
+            pauseBtn.disabled = true;
+            resumeBtn.disabled = true;
+            clearBtn.disabled = false;
+            
+            stopTimer();
+        }
+
+        function pauseRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.pause();
+                isPaused = true;
+                
+                status.textContent = '⏸️ Recording paused';
+                pauseBtn.disabled = true;
+                resumeBtn.disabled = false;
+                
+                stopTimer();
+            }
+        }
+
+        function resumeRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'paused') {
+                mediaRecorder.resume();
+                isPaused = false;
+                
+                status.textContent = '🔴 Recording resumed...';
+                pauseBtn.disabled = false;
+                resumeBtn.disabled = true;
+                
+                startTimer();
+            }
+        }
+
+        function clearRecording() {
+            audioChunks = [];
+            audioBlob = null;
+            pausedTime = 0;
+            
+            timer.textContent = '00:00';
+            status.textContent = 'Ready to record';
+            
+            audioPlayer.style.display = 'none';
+            downloadSection.style.display = 'none';
+            recordingInfo.style.display = 'none';
+            
+            clearBtn.disabled = false;
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                if (!isPaused) {
+                    const elapsed = Date.now() - startTime;
+                    const minutes = Math.floor(elapsed / 60000);
+                    const seconds = Math.floor((elapsed % 60000) / 1000);
+                    timer.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            if (isRecording) {
+                pausedTime = Date.now() - startTime;
+            }
+        }
+
+        function displayAudioPlayer() {
+            const audio = audioPlayer.querySelector('audio');
+            const audioUrl = URL.createObjectURL(audioBlob);
+            audio.src = audioUrl;
+            audioPlayer.style.display = 'block';
+            downloadSection.style.display = 'block';
+        }
+
+        function updateRecordingInfo() {
+            const duration = timer.textContent;
+            const sizeInMB = (audioBlob.size / (1024 * 1024)).toFixed(2);
+            
+            document.getElementById('infoDuration').textContent = duration;
+            document.getElementById('infoSize').textContent = `${sizeInMB} MB`;
+            
+            recordingInfo.style.display = 'block';
+        }
+
+        function downloadRecording() {
+            if (audioBlob) {
+                const url = URL.createObjectURL(audioBlob);
+                const a = document.createElement('a');
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                a.href = url;
+                a.download = `medical-recording-${timestamp}.wav`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                status.textContent = 'Recording downloaded successfully!';
+            }
+        }
+
+        // Prevent accidental page refresh during recording
+        window.addEventListener('beforeunload', (e) => {
+            if (isRecording) {
+                e.preventDefault();
+                e.returnValue = 'Recording in progress. Are you sure you want to leave?';
+            }
+        });
+    </script>
+</body>
+</html>

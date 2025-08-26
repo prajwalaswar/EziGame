@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🩺 Medical Voice Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 800px;
+            padding: 40px;
+            background: #2a2a2a;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .main-title {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: #4A9EFF;
+            font-weight: bold;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 40px;
+            color: #888;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .feature-card {
+            background: #333;
+            border-radius: 15px;
+            padding: 30px;
+            text-decoration: none;
+            color: white;
+            transition: all 0.3s ease;
+            border: 1px solid #444;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            background: #404040;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .feature-title {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .feature-desc {
+            opacity: 0.9;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="main-title">🩺 Medical Voice Assistant</h1>
+        <p class="subtitle">Choose a service below</p>
+        
+        <div class="features-grid">
+            <a href="voice-analyzer.html" class="feature-card">
+                <span class="feature-icon">🎙️</span>
+                <div class="feature-title">Voice-to-Text Analysis</div>
+                <div class="feature-desc">Transcribe and analyze medical conversations with AI-powered speaker identification and summary generation</div>
+            </a>
+            
+            <a href="voice-recorder.html" class="feature-card">
+                <span class="feature-icon">🔊</span>
+                <div class="feature-title">Pure Voice Recording</div>
+                <div class="feature-desc">Record and download audio files for later use or external processing</div>
+            </a>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Doctor-Patient Voice Conversation Analyzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            min-height: 100vh;
+            color: white;
+        }
+
+        .header {
+            text-align: center;
+            padding: 40px 20px;
+            background: #1a1a1a;
+        }
+
+        .main-title {
+            font-size: 2.5em;
+            color: #4A9EFF;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 1.1em;
+            margin-bottom: 40px;
+        }
+
+        .container {
+            display: flex;
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            padding: 0 24px;
+            gap: 32px;
+        }
+
+        .left-panel {
+            background: #2a2a2a;
+            border-radius: 15px;
+            padding: 30px;
+            width: 280px;
+            height: fit-content;
+        }
+
+        .recording-section h3 {
+            color: #ccc;
+            font-size: 1.2em;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 25px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-start {
+            background: #00C851;
+            color: white;
+        }
+
+        .btn-start:hover {
+            background: #00A041;
+        }
+
+        .btn-stop {
+            background: #FF4444;
+            color: white;
+        }
+
+        .btn-stop:hover {
+            background: #CC0000;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            background: #333;
+            padding: 12px 20px;
+            border-radius: 25px;
+            text-align: center;
+            color: #4A9EFF;
+            font-size: 0.9em;
+        }
+
+        .right-panel {
+            flex: 1;
+            min-width: 0;
+            background: #2a2a2a;
+            border-radius: 15px;
+            padding: 30px;
+            min-height: 400px;
+        }
+
+        .live-section {
+            border-left: 3px solid #00C851;
+            padding-left: 20px;
+            margin-bottom: 30px;
+        }
+
+        .live-title {
+            color: #00C851;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .live-words {
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 10px;
+            min-height: 100px;
+            color: #ccc;
+            font-size: 1em;
+            line-height: 1.5;
+        }
+
+        .interim-text {
+            color: #888;
+            font-style: italic;
+        }
+
+        .result-section {
+            margin-bottom: 25px;
+            background: #333;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .result-title {
+            color: #4A9EFF;
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .summary-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .summary-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .summary-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .left-panel {
+                width: 100%;
+            }
+        }
+
+        .title {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+            opacity: 0.9;
+        }
+
+        .record-btn {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: none;
+            font-size: 4rem;
+            cursor: pointer;
+            margin: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        .record-btn.start {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .record-btn.stop {
+            background: linear-gradient(135deg, #f44336, #d32f2f);
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        .record-btn.processing {
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+            color: white;
+            cursor: not-allowed;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .record-btn:hover:not(.processing) {
+            transform: scale(1.05);
+        }
+
+        .status {
+            color: white;
+            font-size: 16px;
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .live-section {
+            background: rgba(0,0,0,0.2);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            color: white;
+        }
+
+        .live-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #4CAF50;
+        }
+
+        .live-words {
+            font-size: 18px;
+            line-height: 1.5;
+            min-height: 60px;
+            padding: 15px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .pulse-animation {
+            animation: textPulse 2s infinite;
+        }
+
+        @keyframes textPulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .result-section {
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 10px;
+            color: white;
+        }
+
+        .result-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #4CAF50;
+        }
+
+        .summary-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .summary-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .summary-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .interim-text {
+            opacity: 0.7;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                padding: 10px;
+            }
+
+            .title {
+                font-size: 2rem;
+            }
+
+            .record-btn {
+                width: 150px;
+                height: 150px;
+                font-size: 3rem;
+            }
+        }
+    </style>
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="main-title">Doctor-Patient Voice Conversation Analyzer</h1>
+        <p class="subtitle">Record medical conversations, separate speakers, and get AI-based summaries</p>
+    </div>
+
+    <div class="container">
+        <div class="left-panel">
+            <div class="recording-section">
+                <h3>🎙️ Start Recording</h3>
+
+                <div class="button-group">
+                    <button class="btn btn-start" id="startBtn">Start</button>
+                    <button class="btn btn-stop" id="stopBtn" disabled>Stop</button>
+                </div>
+
+                <div class="status" id="status">Waiting to start...</div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="live-section">
+                <div class="live-title">Live Words: Listening...</div>
+                <div class="live-words" id="liveWords"></div>
+            </div>
+
+            <div id="result"></div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let recognition;
+        let isRecording = false;
+        let isListening = false;
+
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const liveWords = document.getElementById('liveWords');
+        const result = document.getElementById('result');
+
+        // Clean initial state
+        function initializePage() {
+            liveWords.textContent = '';
+            result.innerHTML = '';
+            status.textContent = 'Waiting to start...';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', initializePage);
+
+        // Initialize speech recognition
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = function() {
+                isListening = true;
+                liveWords.innerHTML = '<span class="interim-text">Listening for speech...</span>';
+            };
+
+            recognition.onresult = function(event) {
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                liveWords.innerHTML = finalTranscript +
+                    (interimTranscript ? ' <span class="interim-text">' + interimTranscript + '</span>' : '');
+            };
+
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                liveWords.textContent = 'Speech recognition error: ' + event.error;
+            };
+
+            recognition.onend = function() {
+                isListening = false;
+                if (isRecording) {
+                    // Restart recognition if still recording
+                    setTimeout(() => {
+                        if (isRecording) {
+                            recognition.start();
+                        }
+                    }, 100);
+                }
+            };
+        } else {
+            liveWords.textContent = 'Speech recognition not supported in this browser';
+        }
+
+        startBtn.addEventListener('click', startRecording);
+        stopBtn.addEventListener('click', stopRecording);
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    await processAudio(audioBlob);
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // Start speech recognition
+                if (recognition) {
+                    recognition.start();
+                }
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                status.textContent = 'Recording in progress...';
+                
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                status.textContent = 'Error: Could not access microphone';
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                
+                // Stop speech recognition
+                if (recognition && isListening) {
+                    recognition.stop();
+                }
+                
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                status.textContent = 'Processing audio...';
+                
+                // Stop all tracks
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        async function processAudio(audioBlob) {
+            try {
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.wav');
+                
+                status.textContent = 'Uploading and analyzing...';
+                
+                const response = await fetch('http://localhost:8000/api/v1/conversation/analyze-conversation/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+                console.log('Doctor transcript:', data.doctor_transcript);
+                console.log('Patient transcript:', data.patient_transcript);
+                console.log('Full transcript:', data.transcript);
+
+                if (response.ok && !data.error) {
+                    displayResults(data);
+                    status.textContent = 'Analysis complete!';
+                } else {
+                    status.textContent = 'Error: ' + (data.error || 'Processing failed');
+                    console.error('Processing error:', data);
+                }
+                
+            } catch (error) {
+                console.error('Error processing audio:', error);
+                status.textContent = 'Error: Could not process audio';
+            }
+        }
+
+        function displayResults(data) {
+            console.log('Displaying results with data:', data);
+
+            // Build interleaved dialogue view from timeline only
+            let timelineHTML = '';
+            if (Array.isArray(data.full_conversation) && data.full_conversation.length > 0) {
+                timelineHTML += '<div class="result-section">';
+                timelineHTML += '<div class="result-title">🗣️ Conversation Timeline</div>';
+                timelineHTML += '<div style="background: #1a1a1a; padding: 15px; border-radius: 8px; margin: 10px 0;">';
+                data.full_conversation.forEach(seg => {
+                    const roleRaw = (seg.speaker || '').toLowerCase();
+                    const role = roleRaw === 'doctor' ? 'Doctor' : 'Patient';
+                    const color = role === 'Doctor' ? '#4A9EFF' : '#00C851';
+                    const text = (seg.text || '').toString();
+                    timelineHTML += `<div style="margin: 6px 0;">
+                        <span style="color: ${color}; font-weight: 600;">${role}:</span>
+                        <span style="white-space: pre-wrap;"> ${text}</span>
+                    </div>`;
+                });
+                timelineHTML += '</div></div>';
+            } else {
+                timelineHTML += '<div class="result-section"><div class="result-title">🗣️ Conversation Timeline</div><div>No conversation detected</div></div>';
+            }
+
+            result.innerHTML = `
+                ${timelineHTML}
+
+                <div class="result-section">
+                    <div class="result-title">📋 SOAP Note</div>
+                    <div id="soapContent">No SOAP note yet</div>
+                    <button id="generateSoap" class="summary-btn" onclick="generateSoapNote()">
+                        Generate SOAP Note
+                    </button>
+                </div>
+            `;
+
+            // Store data globally for generation
+            window.conversationData = data;
+        }
+
+        async function generateSoapNote() {
+            const soapBtn = document.getElementById('generateSoap');
+            const soapContent = document.getElementById('soapContent');
+
+            if (!window.conversationData) {
+                soapContent.textContent = 'No conversation data available';
+                return;
+            }
+
+            soapBtn.textContent = 'Generating...';
+            soapBtn.disabled = true;
+
+            try {
+                const response = await fetch('http://localhost:8000/generate_soap', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        doctor_conversation: window.conversationData.doctor_transcript,
+                        patient_conversation: window.conversationData.patient_transcript,
+                        full_transcript: window.conversationData.transcript,
+                        timeline: window.conversationData.full_conversation || []
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    soapContent.innerHTML = data.soap_html || 'No SOAP generated';
+                } else {
+                    soapContent.textContent = 'Error generating SOAP note';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                soapContent.textContent = 'Error generating SOAP note';
+            } finally {
+                soapBtn.textContent = 'Generate SOAP Note';
+                soapBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
