@@ -47,6 +47,8 @@ app.include_router(voice_recording_router, prefix="/api/v1/voice-recording", tag
 app.include_router(streaming_router, prefix="/api/v1/streaming", tags=["Streaming"])
 # app.include_router(voice_detection_router, prefix="/api/v1/voice-detection", tags=["VoiceDetection"])
 
+
+# hello bhai dar gaya kya 
 if __name__ == "__main__":
     import uvicorn
     print("[STARTUP] Starting FastAPI server on 0.0.0.0:8000")
