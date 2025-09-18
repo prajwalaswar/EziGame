@@ -5,7 +5,7 @@ requests
 librosa
 numpy
 python-dotenv
-groq
+google-genai
 openai-whisper
 torch
 torchaudio

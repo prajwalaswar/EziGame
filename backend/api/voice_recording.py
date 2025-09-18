@@ -5,8 +5,8 @@ import os
 import uuid
 from datetime import datetime
 
-
 from services.voice_to_text_service import process_conversation_audio
+from services.logger import logger
 import os
 router = APIRouter() 
 
@@ -16,9 +16,7 @@ os.makedirs(RECORDINGS_DIR, exist_ok=True)
 
 @router.post("/record/")
 async def record_voice(audio: UploadFile = File(...)):
-    """
-    Save uploaded audio file and return file info
-    """
+    logger.info("Endpoint '/record/' hit: Saving uploaded audio file.")
     try:
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -32,6 +30,7 @@ async def record_voice(audio: UploadFile = File(...)):
         # Get file info
         file_size = os.path.getsize(file_path)
         file_size_mb = round(file_size / (1024 * 1024), 2)
+        logger.info(f"Recording saved successfully: {filename}, Size: {file_size_mb} MB")
         return JSONResponse({
             "success": True,
             "message": "Recording saved successfully",
@@ -43,6 +42,7 @@ async def record_voice(audio: UploadFile = File(...)):
             "download_url": f"/api/v1/voice-recording/download/{filename}"
         })
     except Exception as e:
+        logger.error(f"Failed to save recording: {str(e)}")
         return JSONResponse({
             "success": False,
             "error": str(e),
@@ -51,9 +51,7 @@ async def record_voice(audio: UploadFile = File(...)):
 
 @router.get("/download/{filename}")
 async def download_recording(filename: str):
-    """
-    Download a recorded audio file
-    """
+    logger.info(f"Endpoint '/download/{filename}' hit: Attempting to download recording.")
     file_path = os.path.join(RECORDINGS_DIR, filename)
     
     if not os.path.exists(file_path):
@@ -66,9 +64,7 @@ async def download_recording(filename: str):
 
 @router.get("/list/")
 async def list_recordings():
-    """
-    List all available recordings
-    """
+    logger.info("Endpoint '/list/' hit: Listing all recordings.")
     try:
         recordings = []
         if os.path.exists(RECORDINGS_DIR):
@@ -89,12 +85,14 @@ async def list_recordings():
                     })
         # Sort by creation date (newest first)
         recordings.sort(key=lambda x: x['creation_date'], reverse=True)
+        logger.info(f"Total recordings found: {len(recordings)}")
         return JSONResponse({
             "success": True,
             "recordings": recordings,
             "total_count": len(recordings)
         })
     except Exception as e:
+        logger.error(f"Failed to list recordings: {str(e)}")
         return JSONResponse({
             "success": False,
             "error": str(e),
@@ -104,20 +102,20 @@ async def list_recordings():
 
 @router.delete("/delete/{filename}")
 async def delete_recording(filename: str):
-    """
-    Delete a recorded audio file
-    """
+    logger.info(f"Endpoint '/delete/{filename}' hit: Attempting to delete recording.")
     try:
         file_path = os.path.join(RECORDINGS_DIR, filename)
         
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="Recording not found")
         os.remove(file_path)
+        logger.info(f"Recording {filename} deleted successfully.")
         return JSONResponse({
             "success": True,
             "message": f"Recording {filename} deleted successfully"
         })
     except Exception as e:
+        logger.error(f"Failed to delete recording {filename}: {str(e)}")
         return JSONResponse({
             "success": False,
             "error": str(e),

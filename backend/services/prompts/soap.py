@@ -27,10 +27,10 @@ Rules:
 SOAP_TEMPLATE_GUIDE = r"""
 SOAP Note Template Guidance
 
-S – Subjective: What the patient says (chief complaint, HPI, symptoms).
-O – Objective: What the clinician observes/measures (vitals, exam findings, labs/imaging).
-A – Assessment: Clinician’s diagnosis/differential based on S + O.
-P – Plan: Treatment/tests/follow‑up/education/referrals/medication changes.
+S - Subjective: What the patient says (chief complaint, HPI, symptoms).
+O - Objective: What the clinician observes/measures (vitals, exam findings, labs/imaging).
+A - Assessment: Clinician's diagnosis/differential based on S + O.
+P - Plan: Treatment/tests/follow-up/education/referrals/medication changes.
 """
 
 SOAP_STYLE_EXAMPLE = r"""
@@ -39,25 +39,25 @@ Patient Name: Ramesh Patil
 Date: 06-Jun-2025
 Age/Gender: 68/Male
 Reason for Visit: Follow-up for abdominal discomfort post colonic biopsy
-S – Subjective:
+S - Subjective:
 - Patient reports improvement in abdominal discomfort.
 - Still experiencing occasional bloating.
 - Stools now regular, no bleeding.
 - Appetite has improved.
 - Reports slight weight loss (~2 kg over 1 month).
 - No fever or vomiting.
-O – Objective:
+O - Objective:
 - Temp: 98.6°F; BP: 128/76 mmHg; HR: 72 bpm.
 - Weight: 65 kg (down from 67 kg).
 - Abdomen: Soft, non-tender, no masses.
 - Surgical wound healing well; no signs of infection.
 - Histopathology report received.
-A – Assessment:
+A - Assessment:
 - Healing post colonic procedure is on track.
 - No signs of complications.
 - Mild weight loss may be due to recovery phase.
 - Non-malignant inflammatory changes.
-P – Plan:
+P - Plan:
 - Continue regular diet, increase protein intake.
 - Monitor weight weekly.
 - Review again in 2 weeks; return earlier if pain, bleeding, or fever.

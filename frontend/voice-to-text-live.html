@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OK Voice — Live Transcription + AI Edit</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; color:#fff; background:#121212 }
+        .panel { background:#1f1f1f; padding:20px; border-radius:12px; }
+        .controls { display:flex; gap:10px; margin-bottom:12px; }
+        button { padding:10px 14px; border-radius:8px; border:none; cursor:pointer }
+        .primary { background:#4A9EFF; color:#fff }
+        .danger { background:#ff4444; color:#fff }
+        .small { padding:6px 10px; font-size:14px }
+        .transcript { background:#0f0f0f; padding:15px; border-radius:8px; min-height:180px; overflow:auto }
+        .interim { color: #bdbdbd; font-style:italic }
+        .final-line { margin:6px 0 }
+        .footer { margin-top:12px; display:flex; gap:8px }
+        .ai-result { margin-top:12px; background:#151515; padding:12px; border-radius:8px }
+    </style>
+</head>
+<body>
+    <h1>OK Voice — Live Transcription + AI Edit</h1>
+    <div class="panel">
+        <div class="controls">
+                <button id="startBtn" class="primary">Start</button>
+                <button id="stopBtn" class="danger" disabled>Stop</button>
+                <button id="doneBtn" class="small">Done (small)</button>
+                <button id="aiEditBtn" class="primary small">AI Edit</button>
+                <!-- Mode selector removed: this page always uses WebSocket + Gemini STT -->
+            </div>
+
+        <div style="margin-bottom:12px;">
+            <div style="font-weight:700; color:#4ee1a0; margin-bottom:6px">Live Words: <span id="liveStatus">Listening...</span></div>
+            <div class="transcript" id="transcriptArea">
+                <div id="liveWords" class="interim" style="min-height:40px">&nbsp;</div>
+                <div id="finalText"></div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div id="status">Status: idle</div>
+        </div>
+
+        <div class="ai-result" id="aiResult" style="display:none"></div>
+    </div>
+
+        <script>
+        let socket = null;
+        let isRecording = false;
+        let mediaRecorder = null;
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const doneBtn = document.getElementById('doneBtn');
+        const aiEditBtn = document.getElementById('aiEditBtn');
+        const finalText = document.getElementById('finalText');
+        const interimText = document.getElementById('interimText');
+        const status = document.getElementById('status');
+        const aiResult = document.getElementById('aiResult');
+
+        function initWebSocket() {
+            socket = new WebSocket('ws://localhost:8000/api/v1/streaming/ws/stream-audio/');
+
+            socket.onopen = () => {
+                status.textContent = 'Status: connected';
+            };
+
+            socket.onmessage = (event) => {
+                // Backend may send raw text or JSON with {interim: string} / {final: string}
+                let payload = event.data;
+                let interim = null;
+                let final = null;
+                try {
+                    const parsed = JSON.parse(payload);
+                    if (parsed.interim) interim = parsed.interim;
+                    if (parsed.final) final = parsed.final;
+                } catch (e) {
+                    // not JSON, treat as final line
+                    final = payload;
+                }
+
+                if (interim !== null) {
+                    document.getElementById('liveWords').textContent = interim;
+                    document.getElementById('liveStatus').textContent = 'Listening...';
+                }
+
+                if (final !== null) {
+                    // append final into finalText and clear liveWords
+                    const p = document.createElement('div');
+                    p.className = 'final-line';
+                    p.textContent = final.trim();
+                    finalText.appendChild(p);
+                    finalText.scrollTop = finalText.scrollHeight;
+
+                    // clear live words area
+                    document.getElementById('liveWords').textContent = '';
+                    document.getElementById('liveStatus').textContent = 'Idle';
+                }
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                status.textContent = 'Status: error';
+            };
+
+            socket.onclose = () => {
+                status.textContent = 'Status: disconnected';
+            };
+        }
+
+        startBtn.addEventListener('click', async () => {
+            if (!socket || socket.readyState !== WebSocket.OPEN) initWebSocket();
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data && event.data.size > 0 && socket && socket.readyState === WebSocket.OPEN) {
+                        // Send raw audio blob over websocket
+                        socket.send(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    stream.getTracks().forEach(track => track.stop());
+                    if (socket && socket.readyState === WebSocket.OPEN) socket.close();
+                };
+
+                mediaRecorder.start(250); // send chunks every 250ms
+                isRecording = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                status.textContent = 'Status: recording';
+            } catch (err) {
+                console.error('Microphone access denied or error:', err);
+                status.textContent = 'Status: microphone error';
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            if (mediaRecorder && isRecording) {
+                try { mediaRecorder.stop(); } catch(e){}
+                isRecording = false;
+            }
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            status.textContent = 'Status: idle';
+        });
+
+        // Small Done button: append an indicator and stop recording if running
+        doneBtn.addEventListener('click', () => {
+            const p = document.createElement('div');
+            p.className = 'final-line';
+            p.style.fontWeight = '600';
+            p.textContent = '[Speaker done]';
+            finalText.appendChild(p);
+            finalText.scrollTop = finalText.scrollHeight;
+
+            if (mediaRecorder && isRecording) {
+                try { mediaRecorder.stop(); } catch(e){}
+                isRecording = false;
+                stopBtn.disabled = true;
+                startBtn.disabled = false;
+            }
+        });
+
+        aiEditBtn.addEventListener('click', async () => {
+            // collect transcript text
+            const lines = Array.from(finalText.querySelectorAll('.final-line')).map(n => n.textContent).join('\n');
+            const payload = { transcript: lines };
+
+            aiResult.style.display = 'block';
+            aiResult.textContent = 'AI editing...';
+
+            try {
+                const res = await fetch('http://localhost:8000/api/v1/ai-edit/edit-transcript/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error('Network response not ok');
+                const data = await res.json();
+                aiResult.innerHTML = '<strong>AI Edit Result:</strong><div>' + (data.edited || data.error || '') + '</div>';
+            } catch (err) {
+                console.error(err);
+                aiResult.textContent = 'AI Edit failed: ' + err.message;
+            }
+        });
+        </script>
+</body>
+</html>

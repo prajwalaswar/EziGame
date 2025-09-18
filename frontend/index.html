@@ -25,6 +25,9 @@
             text-align: center;
             max-width: 800px;
             padding: 40px;
+            /* Limit height and allow scrolling so extra feature cards are reachable on smaller viewports */
+            max-height: 85vh;
+            overflow-y: auto;
             background: #2a2a2a;
             border-radius: 20px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -96,11 +99,24 @@
                 <div class="feature-desc">Transcribe and analyze medical conversations with AI-powered speaker identification and summary generation</div>
             </a>
             
+            <a href="live-transcription.html" class="feature-card">
+                <span class="feature-icon">📝</span>
+                <div class="feature-title">Real-time Transcription</div>
+                <div class="feature-desc">Watch your speech transform into text instantly with our AI-powered real-time transcription service</div>
+            </a>
+            
             <a href="voice-recorder.html" class="feature-card">
                 <span class="feature-icon">🔊</span>
                 <div class="feature-title">Pure Voice Recording</div>
                 <div class="feature-desc">Record and download audio files for later use or external processing</div>
             </a>
+            
+            <a href="voice-to-text-live.html" class="feature-card">
+                <span class="feature-icon">🗣️</span>
+                <div class="feature-title">OK Voice → Live + AI Edit</div>
+                <div class="feature-desc">Live speaker-by-speaker transcription with a small 'Done' button and an AI Edit button to refine the transcript</div>
+            </a>
+
         </div>
     </div>
 </body>

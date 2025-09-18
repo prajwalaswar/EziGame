@@ -1,0 +1,13 @@
+backend/.env
+
+# General envs and secret files
+.env
+.env.*
+
+backend/recordings
+
+# Local virtual envs and editor workspace (local-only)
+venv/
+.venv/
+
+

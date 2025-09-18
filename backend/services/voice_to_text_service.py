@@ -1,127 +1,161 @@
 import os
 import logging
 import json
-from .groq_whisper import transcribe_audio
+from .gemini_stt import transcribe_audio
+from services.logger import logger
 
-logger = logging.getLogger(__name__)
-
-async def analyze_speakers_with_llm(transcript):
+async def analyze_speakers_with_llm(transcript, genai_client=None, model=None):
+    logger.info("Starting speaker analysis using LLM.")
     """
     Analyze conversation transcript to identify speakers using LLM
     """
     try:
-        api_key = os.getenv("GROQ_API_KEY")
-        logger.info(f" [LLM] API Key check: {'Found' if api_key else 'Missing'}")
-        if api_key:
-            logger.info(f" [LLM] API Key starts with: {api_key[:10]}...")
+        if not transcript:
+            logger.warning("No transcript provided to LLM analysis")
+            return {
+                "error": "No transcript",
+                "doctor_parts": "",
+                "patient_parts": "",
+                "timeline": [],
+                "confidence": 0.0,
+            }
 
-        from groq import Groq
-        client = Groq(api_key=api_key)
+        # Use injected client if provided, otherwise create one
+        client = genai_client
+        if client is None:
+            api_key = os.getenv("GEMINI_API_KEY")
+            logger.info(f" [LLM] GEMINI_API_KEY check: {'Found' if api_key else 'Missing'}")
+            if api_key:
+                logger.info(f" [LLM] GEMINI_API_KEY starts with: {api_key[:10]}...")
+            import google.genai as genai
+            client = genai.Client(api_key=api_key)
 
-        prompt = f"""
-You are an expert medical conversation analyst. Your job is to SEPARATE a conversation between a DOCTOR and a PATIENT.
-
-TRANSCRIPT TO ANALYZE:
-{transcript}
-
-CRITICAL INSTRUCTIONS:
-1. CAREFULLY READ the entire transcript
-2. IDENTIFY which parts are spoken by the DOCTOR vs the PATIENT
-3. SEPARATE them into two distinct groups
-4. DO NOT duplicate text - each sentence should go to ONLY ONE speaker
-
-SPEAKER IDENTIFICATION CLUES:
-- DOCTOR: Uses medical terms, asks diagnostic questions, gives treatment advice, introduces as "Dr." or "Doctor"
-- PATIENT: Describes symptoms, expresses pain/concerns, asks for help, responds to medical questions
-
-EXAMPLE:
-If transcript is: "Hello I am Dr Smith what brings you here today I have a headache and feel dizzy"
-Then separate as:
-- Doctor: "Hello I am Dr Smith what brings you here today"
-- Patient: "I have a headache and feel dizzy"
-
-NOW ANALYZE THIS TRANSCRIPT AND SEPARATE IT:
-
-Return ONLY this JSON format (no extra text):
-{{
-    "doctor_parts": "All sentences spoken by the doctor combined here",
-    "patient_parts": "All sentences spoken by the patient combined here",
-    "timeline": [
-        {{"speaker": "doctor", "text": "First doctor sentence", "timestamp": "0:00"}},
-        {{"speaker": "patient", "text": "First patient sentence", "timestamp": "0:05"}}
-    ],
-    "confidence": 0.9
-}}
-"""
-
-        logger.info(" [LLM] Sending conversation to Groq for analysis...")
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a medical conversation separator. Your ONLY job is to separate doctor and patient speech. "
-                        "NEVER duplicate text between speakers. Each sentence goes to ONLY ONE speaker. "
-                        "Respond with ONLY valid JSON - no explanations, no extra text."
-                    )
-                },
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.0,  # Make it more deterministic
-            max_tokens=1500
+        # Primary prompt: request strict JSON and set response_mime_type to application/json
+        prompt_system = (
+            "You are a medical conversation separator. Your ONLY job is to separate doctor and patient speech. "
+            "Return STRICT JSON only matching the schema: {\n  \"doctor_parts\": string,\n  \"patient_parts\": string,\n  \"timeline\": [{\"speaker\": \"doctor|patient\", \"text\": string, \"timestamp\": string}],\n  \"confidence\": number\n}\nDo not add any explanatory text.\n"
         )
 
-        llm_response = response.choices[0].message.content.strip()
-        logger.info(f" [LLM] Received analysis: {llm_response[:200]}...")
+        prompt_user = f"TRANSCRIPT:\n{transcript}\n\nReturn JSON only."
 
+        if model is None:
+            model = os.getenv("GEMINI_LLM_MODEL")
+            if not model:
+                logger.error("GEMINI_LLM_MODEL not set in environment; please set it in backend/.env")
+                return {
+                    "error": "GEMINI_LLM_MODEL not configured",
+                }
+
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=[prompt_system, prompt_user],
+                config={
+                    "response_mime_type": "application/json",
+                    # keep other generation defaults
+                },
+            )
+        except Exception as e:
+            logger.warning(f"[LLM] First attempt failed: {e}. Retrying without response_mime_type.")
+            response = client.models.generate_content(
+                model=model,
+                contents=[prompt_system, prompt_user],
+            )
+
+        llm_response = getattr(response, "text", None) or str(response)
+        logger.info(f" [LLM] Received analysis (truncated): {llm_response[:300]}")
+
+        # If the SDK returned JSON directly (response.text possibly already JSON string), attempt parse
         try:
             analysis = json.loads(llm_response)
             logger.info(" [LLM] Successfully parsed JSON response")
-
-            # Clean timeline - remove empty entries and ensure proper formatting
-            cleaned_timeline = []
-            for item in analysis.get("timeline", []):
-                speaker = item.get("speaker")
-                text = item.get("text", "").strip()
-
-                # Only add non-empty text entries
-                if text:
-                    cleaned_timeline.append({
-                        "speaker": speaker,
-                        "text": text,
-                        "timestamp": item.get("timestamp", "estimated")
-                    })
-
-            analysis["timeline"] = cleaned_timeline
-            return analysis
-
         except json.JSONDecodeError:
-            logger.error(" [LLM] JSON parsing failed")
-            return {
-                "doctor_parts": "Analysis failed",
-                "patient_parts": "Analysis failed",
-                "timeline": [],
-                "confidence": 0.3
-            }
+            # Last resort: try to extract JSON substring
+            start = llm_response.find('{')
+            end = llm_response.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                candidate = llm_response[start:end+1]
+                try:
+                    analysis = json.loads(candidate)
+                    logger.info(" [LLM] Parsed JSON after extracting substring")
+                except Exception as e:
+                    logger.error(f" [LLM] Failed to parse JSON after extraction: {e}")
+                    return {
+                        "error": "Invalid JSON response",
+                        "doctor_parts": "",
+                        "patient_parts": "",
+                        "timeline": [],
+                        "confidence": 0.0,
+                    }
+            else:
+                logger.error(" [LLM] No JSON object found in LLM response")
+                return {
+                    "error": "Invalid JSON response",
+                    "doctor_parts": "",
+                    "patient_parts": "",
+                    "timeline": [],
+                    "confidence": 0.0,
+                }
 
-    except Exception as e:
-        logger.error(f" [LLM] Analysis error: {e}")
+        # Normalize analysis fields
+        doctor = analysis.get("doctor_parts", "")
+        patient = analysis.get("patient_parts", "")
+        timeline = analysis.get("timeline", []) or []
+        confidence = float(analysis.get("confidence", 0.0) or 0.0)
+
+        # Clean timeline entries
+        cleaned_timeline = []
+        for item in timeline:
+            if not isinstance(item, dict):
+                continue
+            text = (item.get("text") or "").strip()
+            speaker = (item.get("speaker") or "").lower()
+            if text:
+                cleaned_timeline.append({
+                    "speaker": "doctor" if speaker.startswith("doc") else "patient",
+                    "text": text,
+                    "timestamp": item.get("timestamp", "")
+                })
+
         return {
-            "doctor_parts": f"LLM Analysis Error: {str(e)}",
-            "patient_parts": f"LLM Analysis Error: {str(e)}",
-            "timeline": [],
-            "confidence": 0.1
+            "doctor_parts": doctor,
+            "patient_parts": patient,
+            "timeline": cleaned_timeline,
+            "confidence": confidence,
         }
 
-async def process_conversation_audio(temp_path):
+    except Exception as e:
+        logger.error(f" [LLM] Analysis error: {e}", exc_info=True)
+        return {
+            "doctor_parts": "",
+            "patient_parts": "",
+            "timeline": [],
+            "confidence": 0.0,
+            "error": str(e),
+        }
+
+async def process_conversation_audio(temp_path, genai_client=None, model=None):
+    logger.info(f"Processing audio file: {temp_path}")
     """
-    Process audio file for conversation analysis
+    Process audio file for conversation analysis. Accept optional injected
+    `genai_client` and `model` for DI/testing.
     """
     try:
-        logger.info(" [ANALYZE] Starting Groq Whisper transcription...")
+        logger.info(" [ANALYZE] Starting Gemini transcription...")
         full_transcript = transcribe_audio(temp_path)
-        logger.info(f" [ANALYZE] Full transcript obtained: {full_transcript[:100]}...")
+        logger.info(f" [ANALYZE] Full transcript obtained: {str(full_transcript)[:200]}...")
+
+        # If transcription failed (None), return structured error response and skip LLM call
+        if full_transcript is None:
+            logger.warning(" [ANALYZE] Transcription failed or empty - skipping LLM analysis")
+            return {
+                "error": "Transcription failed",
+                "transcript": "",
+                "doctor_transcript": "",
+                "patient_transcript": "",
+                "full_conversation": [],
+                "analysis_confidence": 0.0,
+            }
 
         # Check if transcript is empty or too short
         if not full_transcript or len(full_transcript.strip()) < 10:
@@ -135,7 +169,7 @@ async def process_conversation_audio(temp_path):
             }
 
         logger.info(" [ANALYZE] Sending to LLM for speaker analysis...")
-        analyzed_conversation = await analyze_speakers_with_llm(full_transcript)
+        analyzed_conversation = await analyze_speakers_with_llm(full_transcript, genai_client=genai_client, model=model)
 
         logger.info(f" [ANALYZE] LLM Analysis result keys: {list(analyzed_conversation.keys())}")
         logger.info(f" [ANALYZE] Doctor parts length: {len(analyzed_conversation.get('doctor_parts', ''))}")
@@ -151,11 +185,11 @@ async def process_conversation_audio(temp_path):
         }
 
         logger.info(f" [ANALYZE] Final result keys: {list(result.keys())}")
+        logger.info("Audio processing and analysis completed successfully.")
         return result
 
     except Exception as e:
-        logger.error(f" [ANALYZE] Error: {str(e)}")
-        logger.error(f" [ANALYZE] Error traceback: ", exc_info=True)
+        logger.error(f"Error during audio processing: {str(e)}", exc_info=True)
         return {
             "error": str(e),
             "transcript": "",
@@ -164,7 +198,7 @@ async def process_conversation_audio(temp_path):
             "full_conversation": []
         }
 
-async def generate_conversation_summary(data):
+async def generate_conversation_summary(data, genai_client=None, model=None):
     """
     Generate AI summary of conversation
     """
@@ -177,9 +211,11 @@ async def generate_conversation_summary(data):
         else:
             conversation_text = transcript
 
-        from groq import Groq
-        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
+        # Use injected client if provided, else create one
+        client = genai_client
+        if client is None:
+            import google.genai as genai
+            client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         prompt = f"""
 You are a medical conversation summarizer. Read the following conversation and provide a concise, clear summary of the main points, symptoms, diagnosis, and advice given. Use simple language.
 
@@ -188,28 +224,41 @@ CONVERSATION:
 
 SUMMARY:
 """
-
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": "You are a medical conversation summarizer. Always respond with a clear summary only."},
-                {"role": "user", "content": prompt}
+        if model is None:
+            model = os.getenv("GEMINI_LLM_MODEL")
+            if not model:
+                logger.error("GEMINI_LLM_MODEL not set in environment; please set it in backend/.env")
+                return {"summary": "", "error": "GEMINI_LLM_MODEL not configured"}
+        response = client.models.generate_content(
+            model=model,
+            contents=[
+                "You are a medical conversation summarizer. Always respond with a clear summary only.",
+                prompt,
             ],
-            temperature=0.2,
-            max_tokens=400
         )
-
-        summary = response.choices[0].message.content.strip()
+        summary = getattr(response, "text", "").strip()
         return {"summary": summary}
 
     except Exception as e:
         logger.error(f"Error generating summary: {e}")
         return {"error": str(e), "summary": ""}
 
+async def generate_soap_note(data, genai_client=None, model=None):
+    """Generate SOAP note JSON via LLM and render HTML.
 
+    Accepts an optional injected `genai_client` and `model` to make the service
+    testable and configurable via dependency injection.
+    """
+    try:
+        return await _generate_soap_note_impl(data, genai_client=genai_client, model=model)
+    except Exception as e:
+        logger.error(f"Error generating SOAP: {e}")
+        return {"soap_html": "", "soap_json": {}, "error": str(e)}
 
-async def generate_soap_note(data):
-    """Generate SOAP note JSON via LLM and render HTML."""
+async def _generate_soap_note_impl(data, genai_client=None, model=None):
+    """
+    Generate SOAP note JSON via LLM and render HTML.
+    """
     try:
         transcript = data.get("transcript", "")
         timeline = data.get("timeline", [])
@@ -221,32 +270,44 @@ async def generate_soap_note(data):
         if not conversation_text or not conversation_text.strip():
             return {"soap_html": "", "soap_json": {}, "error": "No conversation text provided"}
 
-        from groq import Groq
         from services.prompts.soap import build_messages
 
-        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        # Use injected client if provided, else create one
+        client = genai_client
+        if client is None:
+            from google import genai
+            client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+        if model is None:
+            model = os.getenv("GEMINI_LLM_MODEL")
+            if not model:
+                logger.error("GEMINI_LLM_MODEL not set in environment; please set it in backend/.env")
+                return {"soap_html": "", "soap_json": {}, "error": "GEMINI_LLM_MODEL not configured"}
+
         messages = build_messages(conversation_text)
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=messages,
-            temperature=0.1,
-            max_tokens=900,
+
+        # build_messages returns a list of dicts with 'role' and 'content'; extract contents
+        contents_list = [m.get("content") if isinstance(m, dict) else str(m) for m in messages]
+        response = client.models.generate_content(
+            model=model,
+            contents=contents_list,
         )
-        content = response.choices[0].message.content.strip()
+        content = getattr(response, "text", "").strip()
 
         import json as _json
         try:
             data_json = _json.loads(content)
         except Exception:
             # Second attempt: ask for JSON only
-            messages[-1]["content"] += "\n\nIMPORTANT: Return STRICT JSON only."
-            response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=messages,
-                temperature=0.1,
-                max_tokens=900,
+            if isinstance(messages[-1], dict):
+                messages[-1]["content"] = messages[-1].get("content", "") + \
+                                          "\n\nIMPORTANT: Return STRICT JSON only."
+            retry_contents = [m.get("content") if isinstance(m, dict) else str(m) for m in messages]
+            retry_resp = client.models.generate_content(
+                model=model,
+                contents=retry_contents,
             )
-            content = response.choices[0].message.content.strip()
+            content = getattr(retry_resp, "text", "").strip()
             data_json = _json.loads(content)
 
         # Normalize fields
@@ -266,7 +327,7 @@ async def generate_soap_note(data):
         age_gender = norm(data_json.get("age_gender"), "Not discussed")
         reason = norm(data_json.get("reason_for_visit"), "Not discussed")
 
-        # Render HTML matching the provided style
+        # Render HTML
         def bullets(items):
             if not items:
                 return "<div>Not discussed</div>"
@@ -283,10 +344,18 @@ async def generate_soap_note(data):
         <div><strong>Date:</strong> {date}</div>
         <div><strong>Age/Gender:</strong> {age_gender}</div>
         <div><strong>Reason for Visit:</strong> {reason}</div>
-        <div class=\"result-section\" style=\"margin-top:10px;\"><div class=\"result-title\">S – Subjective</div>{bullets(subj)}</div>
-        <div class=\"result-section\"><div class=\"result-title\">O – Objective</div>{vitals_html}{bullets(exam)}{bullets(labs)}</div>
-        <div class=\"result-section\"><div class=\"result-title\">A – Assessment</div>{bullets(assess)}</div>
-        <div class=\"result-section\"><div class=\"result-title\">P – Plan</div>{bullets(plan)}</div>
+        <div class="result-section" style="margin-top:10px;">
+            <div class="result-title">S - Subjective</div>{bullets(subj)}
+        </div>
+        <div class="result-section">
+            <div class="result-title">O - Objective</div>{vitals_html}{bullets(exam)}{bullets(labs)}
+        </div>
+        <div class="result-section">
+            <div class="result-title">A - Assessment</div>{bullets(assess)}
+        </div>
+        <div class="result-section">
+            <div class="result-title">P - Plan</div>{bullets(plan)}
+        </div>
         """
 
         return {"soap_html": soap_html, "soap_json": data_json}
@@ -294,3 +363,39 @@ async def generate_soap_note(data):
     except Exception as e:
         logger.error(f"Error generating SOAP: {e}")
         return {"soap_html": "", "soap_json": {}, "error": str(e)}
+
+
+async def generate_ai_edit(transcript: str, genai_client=None, model=None):
+    """Call LLM to edit/clean the transcript for clarity while preserving clinical meaning."""
+    try:
+        if not transcript or not str(transcript).strip():
+            return ""
+
+        # Use injected client if provided, else create one
+        client = genai_client
+        if client is None:
+            import google.genai as genai
+            client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+        prompt_system = (
+            "You are a helpful clinical editor. Improve clarity, grammar, and formatting of the transcript while preserving all clinical facts. "
+            "Return the edited transcript as plain text only (no commentary)."
+        )
+
+        prompt_user = f"TRANSCRIPT:\n{transcript}\n\nProvide the edited transcript only."
+
+        if model is None:
+            model = os.getenv("GEMINI_LLM_MODEL")
+            if not model:
+                logger.error("GEMINI_LLM_MODEL not set in environment; please set it in backend/.env")
+                return ""
+        response = client.models.generate_content(
+            model=model,
+            contents=[prompt_system, prompt_user],
+        )
+
+        edited = getattr(response, "text", "").strip()
+        return edited
+    except Exception as e:
+        logger.error(f"generate_ai_edit error: {e}")
+        return f"Error: {str(e)}"

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Voice Transcription</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .transcription-container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin: 20px 0;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        
+        .recording {
+            background-color: #ff4444;
+        }
+        
+        .transcript {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .interim {
+            color: gray;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>Real-time Voice Transcription</h1>
+    
+    <div class="controls">
+        <button id="startButton">Start Recording</button>
+        <button id="stopButton" disabled>Stop Recording</button>
+        <select id="transcriptionMode">
+            <option value="webspeech">Web Speech API</option>
+            <option value="websocket">WebSocket Streaming</option>
+        </select>
+    </div>
+    
+    <div class="transcription-container">
+        <div id="finalTranscript" class="transcript"></div>
+        <div id="interimTranscript" class="transcript interim"></div>
+    </div>
+
+    <script>
+        let isRecording = false;
+        let recognition = null;
+        let socket = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const modeSelect = document.getElementById('transcriptionMode');
+        const finalTranscriptDiv = document.getElementById('finalTranscript');
+        const interimTranscriptDiv = document.getElementById('interimTranscript');
+
+        // Initialize Web Speech API
+        function initWebSpeech() {
+            if ('webkitSpeechRecognition' in window) {
+                recognition = new webkitSpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+
+                recognition.onresult = (event) => {
+                    let interimTranscript = '';
+                    let finalTranscript = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
+                        } else {
+                            interimTranscript += event.results[i][0].transcript;
+                        }
+                    }
+
+                    if (finalTranscript) {
+                        const lastParagraph = finalTranscriptDiv.lastElementChild;
+                        if (lastParagraph && lastParagraph.tagName === 'P') {
+                            lastParagraph.innerHTML += ` ${finalTranscript.trim()}`;
+                        } else {
+                            finalTranscriptDiv.innerHTML += `<p>${finalTranscript.trim()}</p>`;
+                        }
+
+                        finalTranscriptDiv.scrollTop = finalTranscriptDiv.scrollHeight;
+                    }
+
+                    interimTranscriptDiv.innerHTML = `<p>${interimTranscript}</p>`;
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                };
+            } else {
+                console.error('Web Speech API is not supported in this browser');
+            }
+        }
+
+        // Initialize WebSocket connection
+        function initWebSocket() {
+            socket = new WebSocket('ws://localhost:8000/api/v1/streaming/ws/stream-audio/');
+            
+            socket.onopen = () => {
+                console.log('WebSocket connection established');
+            };
+            
+            socket.onmessage = (event) => {
+                const transcription = event.data;
+                finalTranscriptDiv.innerHTML += `<p>${transcription}</p>`;
+                finalTranscriptDiv.scrollTop = finalTranscriptDiv.scrollHeight;
+            };
+            
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            socket.onclose = () => {
+                console.log('WebSocket connection closed');
+            };
+        }
+
+        // Initialize MediaRecorder for WebSocket streaming
+        async function initMediaRecorder() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0 && socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+            }
+        }
+
+        startButton.onclick = async () => {
+            const mode = modeSelect.value;
+            
+            if (mode === 'webspeech') {
+                if (recognition) {
+                    recognition.start();
+                } else {
+                    initWebSpeech();
+                    recognition.start();
+                }
+            } else {
+                if (!socket) {
+                    initWebSocket();
+                }
+                if (!mediaRecorder) {
+                    await initMediaRecorder();
+                }
+                mediaRecorder.start(100); // Send audio chunks every 100ms
+            }
+            
+            isRecording = true;
+            startButton.disabled = true;
+            stopButton.disabled = false;
+            startButton.classList.add('recording');
+        };
+
+        stopButton.onclick = () => {
+            const mode = modeSelect.value;
+            
+            if (mode === 'webspeech' && recognition) {
+                recognition.stop();
+            } else if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                if (socket) {
+                    socket.close();
+                    socket = null;
+                }
+            }
+            
+            isRecording = false;
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            startButton.classList.remove('recording');
+        };
+
+        // Initialize Web Speech API on page load
+        initWebSpeech();
+    </script>
+</body>
+</html>

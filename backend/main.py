@@ -1,39 +1,26 @@
-
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from api.conversation import router as conversation_router
 from api.voice_recording import router as voice_recording_router
-from services.voice_to_text_service import generate_conversation_summary, generate_soap_note
+from api.summary import router as summary_router
+from api.ai_edit import router as ai_edit_router
+from api.streaming import router as streaming_router
+# from api.voice_detection import router as voice_detection_router
+from api.legacy import router as legacy_router
 
 # Load environment variables from backend/.env
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
-
-print(f"🔑 GROQ_API_KEY loaded: {'Yes' if os.getenv('GROQ_API_KEY') else 'No'}")
-if os.getenv('GROQ_API_KEY'):
-    print(f"🔑 API Key starts with: {os.getenv('GROQ_API_KEY')[:10]}...")
-
+print(f"🔑 GEMINI_API_KEY loaded: {'Yes' if os.getenv('GEMINI_API_KEY') else 'No'}")
+if os.getenv('GEMINI_API_KEY'):
+    print(f"🔑 API Key starts with: {os.getenv('GEMINI_API_KEY')[:10]}...")
 
 app = FastAPI(title="Medical Voice Assistant API", version="2.0.0")
-
-# Pydantic model for summary request
-class GenerateSummaryRequest(BaseModel):
-    doctor_conversation: str
-    patient_conversation: str
-    full_transcript: str
-
-# Pydantic model for SOAP request
-class GenerateSOAPRequest(BaseModel):
-    doctor_conversation: str
-    patient_conversation: str
-    full_transcript: str
-    timeline: list | None = None
 
 # Allow CORS for local Streamlit frontend
 
@@ -45,46 +32,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Mount static files for downloads and HTML pages
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/recordings", StaticFiles(directory="recordings"), name="recordings")
+app.include_router(summary_router, prefix="/api/v1/summary", tags=["Summary"])
 
-# Root endpoint for summary generation (called directly by frontend)
-@app.post("/generate_summary")
-async def generate_summary_endpoint(request: GenerateSummaryRequest):
-    """Generate summary from doctor and patient conversations"""
-    try:
-        # Combine conversations for summary
-        combined_text = f"""
-        Doctor Conversation: {request.doctor_conversation}
+# Legacy root endpoints for backwards compatibility (e.g., /generate_soap)
+app.include_router(legacy_router, prefix="", tags=["Legacy"])
 
-        Patient Conversation: {request.patient_conversation}
-
-        Full Transcript: {request.full_transcript}
-        """
-
-        # Use existing summary service (expects 'transcript' or 'timeline')
-        summary_data = {"transcript": combined_text}
-        result = await generate_conversation_summary(summary_data)
-        return JSONResponse(result)
-    except Exception as e:
-        return JSONResponse({"error": str(e), "summary": "Error generating summary"}, status_code=500)
-
-# New endpoint for SOAP note generation
-@app.post("/generate_soap")
-async def generate_soap_endpoint(request: GenerateSOAPRequest):
-    try:
-        combined_text = f"Doctor: {request.doctor_conversation}\nPatient: {request.patient_conversation}\n{request.full_transcript}"
-        data = {"transcript": combined_text, "timeline": request.timeline or []}
-        result = await generate_soap_note(data)
-        return JSONResponse(result)
-    except Exception as e:
-        return JSONResponse({"soap_html": "", "soap_json": {}, "error": str(e)}, status_code=500)
+app.include_router(ai_edit_router, prefix="/api/v1/ai-edit", tags=["AIEdit"])
 
 # Include routers
-app.include_router(conversation_router, prefix="/api/v1/conversation")
-app.include_router(voice_recording_router, prefix="/api/v1/voice-recording")
+app.include_router(conversation_router, prefix="/api/v1/conversation", tags=["Conversation"])
+app.include_router(voice_recording_router, prefix="/api/v1/voice-recording", tags=["VoiceRecording"])
+app.include_router(streaming_router, prefix="/api/v1/streaming", tags=["Streaming"])
+# app.include_router(voice_detection_router, prefix="/api/v1/voice-detection", tags=["VoiceDetection"])
 
 if __name__ == "__main__":
     import uvicorn

@@ -435,8 +435,29 @@
                     }
                 }
 
-                liveWords.innerHTML = finalTranscript +
-                    (interimTranscript ? ' <span class="interim-text">' + interimTranscript + '</span>' : '');
+                // Append final transcript to the same paragraph
+                const lastParagraph = liveWords.lastElementChild;
+                if (finalTranscript) {
+                    if (lastParagraph && lastParagraph.tagName === 'DIV') {
+                        lastParagraph.innerHTML = finalTranscript.trim();
+                    } else {
+                        const newParagraph = document.createElement('div');
+                        newParagraph.textContent = finalTranscript.trim();
+                        liveWords.appendChild(newParagraph);
+                    }
+                }
+
+                // Update interim transcript dynamically
+                if (interimTranscript) {
+                    const interimSpan = document.createElement('span');
+                    interimSpan.className = 'interim-text';
+                    interimSpan.textContent = interimTranscript;
+                    liveWords.appendChild(interimSpan);
+                } else {
+                    // Clear interim text when no interim results
+                    const interimElements = liveWords.querySelectorAll('.interim-text');
+                    interimElements.forEach(element => element.remove());
+                }
             };
 
             recognition.onerror = function(event) {
@@ -600,7 +621,7 @@
             soapBtn.disabled = true;
 
             try {
-                const response = await fetch('http://localhost:8000/generate_soap', {
+                const response = await fetch('http://localhost:8000/api/v1/summary/generate_soap', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
